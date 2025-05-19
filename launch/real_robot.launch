@@ -1,0 +1,28 @@
+<launch>
+    <!-- Set the fixed frame ID -->
+    <param name="~frame_id" type="string" value="world_ned" /> 
+
+    <!-- Include Turtlebot motion planning launch -->
+    <include file="$(find turtlebot_simulation)/launch/kobuki_motion_planning.launch" /> 
+    
+    <!-- Launch main dead reckoning / localization node -->
+    <node pkg="localization" type="real_robot_node.py.py" name="pose_based_slam" output="screen"/>
+
+    <!-- <node pkg="tf" type="static_transform_publisher" name="rplidar_static_tf" args="0 0 0 0 0 0 turtlebot/base_footprint turtlebot/rplidar 10"/> -->
+    <node pkg="tf" type="static_transform_publisher" name="rplidar_static_tf"
+      args="0 0 0 3.1416 3.1416 3.1416 turtlebot/base_footprint turtlebot/rplidar 3"/>
+
+
+    <!-- Optional: Laser scan to point cloud node -->
+    <node pkg="localization" type="laser_scan_to_point_cloud_node.py" name="laserscan_to_pointcloud" output="screen"/>
+
+    <!-- Octomap server to build a 3D map -->
+    <node pkg="octomap_server" type="octomap_server_node" name="octomap" output="screen"/>
+
+    <!-- GUI steering tool to manually move the robot -->
+    <node pkg="rqt_robot_steering" type="rqt_robot_steering" name="rqt_robot_steering" output="screen"/>
+
+    <!-- Launch RViz with your configuration -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find localization)/config/hol.rviz"/>
+</launch>
+
