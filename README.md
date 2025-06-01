@@ -29,8 +29,8 @@ This project presents a pose-based Extended Kalman Filter (EKF) SLAM system usin
 
 ### Software
 - **Ubuntu 20.04 LTS** with **ROS Noetic (ROS 1)**  
-- Behavior trees implemented using [`py_trees`](https://github.com/splintered-reality/py_trees)  
-- Custom Python/C++ scripts for kinematics and motion control  
+
+- Custom Python scripts for kinematics and motion control  
 - Simulation and testing using:
   - [Stonefish Simulator](https://github.com/patrykcieslak/stonefish)  
   - [Stonefish ROS Bridge](https://github.com/patrykcieslak/stonefish_ros)
@@ -67,7 +67,7 @@ source devel/setup.bash
 
 # Step 5: Run the system
 
-# Launch manipulator arm only (no base)
+# Launch EKF_Pose_SLAM
 roslaunch localization slam_icp.launch
 
 
