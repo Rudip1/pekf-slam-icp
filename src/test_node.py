@@ -8,12 +8,11 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Math imports
-
-import csv
 import numpy as np
 import threading
 import scipy.linalg
-from math import radians, degrees
+import csv
+from math import radians, degrees, atan2 , sqrt , pi , floor , cos , sin
 from numpy.linalg import eig
 
 # ROS basics imports
@@ -38,6 +37,9 @@ from utils_script.ekf_pose_slam import PoseSLAMEKF
 from utils_script.icp import ICP
 from utils_script.pose import Pose3D
 from utils_script.helper import *
+from tf import transformations as tf 
+import tf.transformations
+from laser_geometry import LaserProjection
 
 # -------------------------
 # Differential Drive Class
@@ -112,10 +114,10 @@ class DifferentialDrive:
         self.last_time = rospy.Time.now().to_sec()
 
         # scan matching variables 
-        self.min_scan_th_distance = 0.8  # minimum scan taking distance  
+        self.min_scan_th_distance = 0.4  # minimum scan taking distance  
         self.min_scan_th_angle = np.pi # take scan angle thershold
         self.overlapping_check_th_dis = 1 # ovrlapping checking distance thershold 
-        self.max_scan_history = 33 # maximum amount of scan history to store 
+        self.max_scan_history = 330 # maximum amount of scan history to store 
         self.num_of_scans_to_remove = 4 # number of scans to remove from the history
         self.max_scans_to_match = 5 # maximum number of scans to match
 
@@ -155,11 +157,6 @@ class DifferentialDrive:
         self.scan = []  # Initialize the scan
         self.scan_cartesian = []
         self.gt_theta = 0.0
-
-        # Automatically get path to 'data' folder inside the same package
-        # self.data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
-        # if not os.path.exists(self.data_dir):
-        #     os.makedirs(self.data_dir)
 
         # Automatically get path to 'hol/data' folder (one level above src/)
         self.data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
@@ -374,28 +371,6 @@ class DifferentialDrive:
         wheel_vel = Float64MultiArray()
         wheel_vel.data = [left_wheel_velocity, right_wheel_velocity]
         self.vel_pub.publish(wheel_vel)
-    
-    # def ground_truth_callback(self, msg):
-    #     """
-    #     Receives ground truth Odometry and initializes EKF + tracks GT path.
-    #     """
-    #     # Extract ground truth pose
-    #     gt_x = msg.pose.pose.position.x
-    #     gt_y = msg.pose.pose.position.y
-    #     q = msg.pose.pose.orientation
-    #     (_, _, gt_theta) = euler_from_quaternion([q.x, q.y, q.z, q.w])
-    #     self.gt_theta = gt_theta
-
-    #     # Initialize EKF once using GT pose
-    #     if not hasattr(self, 'initialized') or not self.initialized:
-    #         self.xk = np.array([gt_x, gt_y, gt_theta]).reshape(3, 1)
-    #         rospy.loginfo(f"EKF initialized from ground truth: [{gt_x:.2f}, {gt_y:.2f}, {degrees(gt_theta):.1f}°]")
-    #         self.initialized = True
-
-    #     # Always save ground truth pose for trajectory
-    #     if not hasattr(self, 'gt_path'):
-    #         self.gt_path = []
-    #     self.gt_path.append((gt_x, gt_y))
 
     def ground_truth_callback(self, msg):
         """
@@ -431,16 +406,25 @@ class DifferentialDrive:
             scan (LaserScan): The scan data
             '''
         self.mutex.acquire()
-        scan = self.transform_cloud(self.child_frame , self.rplidar_frame , scan)
+
+        # Transform the scan into the robot's frame
+        scan = self.transform_cloud(self.child_frame, self.rplidar_frame, scan)
+        if scan is None:
+            rospy.logwarn("Skipping scan because transform failed.")
+            self.mutex.release()
+            return
         # Convert laser scan data to x, y coordinates in robot frame 
         self.scan_cartesian = np.array(scan)
     
+        # If this is the first scan
         if(len(self.map) == 0 and len(self.scan_cartesian)):
             self.publish_covariance_marker()
             self.scan_world = scan_to_world(self.scan_cartesian, self.xk[-3:])
             self.scan.append(self.scan_cartesian)
             self.map.append(self.scan_world)    
             self.xk , self.Pk = self.pse.Add_New_Pose(self.xk, self.Pk)
+        
+        # If enough movement happened, add a new scan & pose
         elif(len(self.scan_cartesian) and check_scan_threshold(self.xk,self.min_scan_th_distance, self.min_scan_th_angle)):
             self.publish_covariance_marker()
             self.scan_world = scan_to_world(self.scan_cartesian  , self.xk[-3:])
@@ -454,25 +438,35 @@ class DifferentialDrive:
             Rp = np.zeros((0,0)) # predicted scan covariance
             Hp = []
             i =0 
+
+            # check if the scan is overlapping with the previous scans
             for j in Ho:
                 jXk = self.pse.hfj(self.xk, j)
                 jPk = self.pse.jPk(self.xk, self.Pk ,j)
                 matched_scan = self.scan[j]
                 current_scan = self.scan[-1]
                 xk  = self.xk[-3:].reshape(3,1)
+
                 # ICP Registration 
                 zr  = ICP(matched_scan, current_scan, jXk)
                 matched_pose = self.xk[j:j+3,:].reshape((3,1))
                 Rr = self.R_icp
+
+
                 isCompatibile = self.pse.ICNN(jXk, jPk , zr, Rr )
                 if(isCompatibile):
                     zp = np.block([[zp],[zr]])
                     Rp = scipy.linalg.block_diag(Rp, Rr)
                     Hp.append(j)
+
+            # EKF update if we have matches
             if(len(Hp)>0):
+                rospy.loginfo(f"EKF updated with {len(Hp)} ICP matches.")
                 zk ,Rk, Hk,Vk = self.pse.ObservationMatrix(self.xk , Hp,zp,Rp )
                 self.xk , self.Pk = self.pse.Update(self.xk, self.Pk, Hk, Vk, zk, Rk,Hp)
-
+            else:
+                rospy.logwarn("No ICP matches found—covariance will grow!")
+            
             # remove the oldest scan
             if(len(self.map) > self.max_scan_history):
                   
@@ -483,14 +477,7 @@ class DifferentialDrive:
                 for i in sorted(indices, reverse=True):
                     self.scan.pop(i)
                     self.map.pop(i)
-                # for i in range(self.num_of_scans_to_remove ):
-                #     print("remove")
-                #     print("scan", len(self.scan))
-                #     print("map", len(self.map))
-                #     self.scan.pop(0)
-                #     self.map.pop(0)
-                #     print("scan", len(self.scan))
-                #     print("map", len(self.map))
+                rospy.loginfo(f"Removed {self.num_of_scans_to_remove} oldest scans and poses.")
 
         # Always update RViz
         if len(self.scan) > 0:
@@ -565,7 +552,9 @@ class DifferentialDrive:
         self.odom_pub.publish(odom)
      
         self.tf_broadcaster.sendTransform((self.xk[-3], self.xk[-2], 0.0), q , rospy.Time.now(), self.child_frame, self.parent_frame)
-   
+        if not self.initialized:
+            rospy.logwarn_once("EKF not initialized from ground truth yet; publishing default pose.")
+    
     # -------------------------
     # Visualization (RViz markers) functions
         #1_publish_trajectory
@@ -584,8 +573,8 @@ class DifferentialDrive:
         path_marker.action = Marker.ADD
         path_marker.id = 999  # unique ID for the trajectory marker
 
-        path_marker.scale.x = 0.02  # Line width
-        path_marker.color = ColorRGBA(0.0, 1.0, 0.0, 1)  # Green, opaque
+        path_marker.scale.x = 0.0175  # Line width
+        path_marker.color = ColorRGBA(0.0, 1.0, 0.0, 0.8)  # Green, opaque
 
         # Add each pose (x, y) to the path
         for i in range(0, len(self.xk), 3):
@@ -607,7 +596,7 @@ class DifferentialDrive:
         path_marker.action = Marker.ADD
         path_marker.id = 1000  # unique ID
 
-        path_marker.scale.x = 0.02  # Line width
+        path_marker.scale.x = 0.0175 # Line width
         path_marker.color = ColorRGBA(1.0, 0.0, 0.0, 0.8)  # Red, semi-transparent
 
         for (x, y) in self.gt_path:
@@ -645,11 +634,11 @@ class DifferentialDrive:
             myPoint.y = self.xk[i+1]
 
             myMarker.pose.position = myPoint
-            myMarker.color=ColorRGBA(0.224, 1, 0, 0.35)
+            myMarker.color=ColorRGBA(1.0, 0.0, 0, 0.5)
 
-            myMarker.scale.x = 0.1
-            myMarker.scale.y = 0.1
-            myMarker.scale.z = 0.05
+            myMarker.scale.x = 0.08
+            myMarker.scale.y = 0.08
+            myMarker.scale.z = 0.08
             viewpoints_list.append(myMarker)
 
         self.viewpoints_pub.publish(viewpoints_list)
@@ -678,7 +667,9 @@ class DifferentialDrive:
             else:
                 marker_scale  = [2.4*np.sqrt(eigenvalues[0]), 2.4*np.sqrt(eigenvalues[1]) , 0.0001 ]
 
-            marker_color  = [1.0, 1.0, 0.0, 1.0]  # Red colo
+            #marker_color  = [0.0, 1.0, 0.0, 0.8]  # Red color
+            marker_color = [1.0, 0.5, 0.0, 0.9]  # Cyan, bright and distinct
+
             id += 1
             marker.id = id 
             marker.scale.x = marker_scale[0]

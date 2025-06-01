@@ -114,10 +114,10 @@ class DifferentialDrive:
         self.last_time = rospy.Time.now().to_sec()
 
         # scan matching variables 
-        self.min_scan_th_distance = 0.8  # minimum scan taking distance  
+        self.min_scan_th_distance = 0.4  # minimum scan taking distance  
         self.min_scan_th_angle = np.pi # take scan angle thershold
         self.overlapping_check_th_dis = 1 # ovrlapping checking distance thershold 
-        self.max_scan_history = 33 # maximum amount of scan history to store 
+        self.max_scan_history = 330 # maximum amount of scan history to store 
         self.num_of_scans_to_remove = 4 # number of scans to remove from the history
         self.max_scans_to_match = 5 # maximum number of scans to match
 
@@ -157,7 +157,7 @@ class DifferentialDrive:
         self.scan = []  # Initialize the scan
         self.scan_cartesian = []
         self.gt_theta = 0.0
-
+        
         # Automatically get path to 'hol/data' folder (one level above src/)
         self.data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
         if not os.path.exists(self.data_dir):
@@ -166,6 +166,11 @@ class DifferentialDrive:
         # Initialize the csv log for slam and ground truth
         self.csv_slam_log = [] #Initialize the csv log for slam
         self.csv_gt_log = [] #Initialize the csv log for ground truth
+        self.csv_sigma_log = []  # [time, slam_3sigma_x, slam_3sigma_y, dr_3sigma_x, dr_3sigma_y]
+        self.xk_dr = self.xk.copy()
+        self.Pk_dr = self.Pk.copy()
+
+
 
         # -----------------------------
         # ROS Publishers
@@ -199,6 +204,7 @@ class DifferentialDrive:
         # Save SLAM and Ground Truth logs to CSV files
         slam_path = os.path.join(self.data_dir, 'slam_icp_log.csv')
         gt_path = os.path.join(self.data_dir, 'ground_truth_log.csv')
+        sigma_path = os.path.join(self.data_dir, 'three_sigma_log.csv')
 
         with open(slam_path, 'w', newline='') as f:
             writer = csv.writer(f)
@@ -209,6 +215,14 @@ class DifferentialDrive:
             writer = csv.writer(f)
             writer.writerow(['time', 'gt_x', 'gt_y', 'gt_theta'])
             writer.writerows(self.csv_gt_log)
+
+        sigma_path = os.path.join(self.data_dir, 'three_sigma_log.csv')
+        with open(sigma_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['time', 'slam_3sigma_x', 'slam_3sigma_y', 'dr_3sigma_x', 'dr_3sigma_y'])
+            writer.writerows(self.csv_sigma_log)
+
+        rospy.loginfo(f"[CSV] Saved 3 sigma uncertainty log to: {sigma_path}")
 
         rospy.loginfo(f"[CSV] Saved SLAM to: {slam_path}")
         rospy.loginfo(f"[CSV] Saved GT   to: {gt_path}")
@@ -331,6 +345,9 @@ class DifferentialDrive:
 
             # Build control input (dx, dy=0, dtheta)
             uk = np.array([self.v*self.dt, 0, self.w*self.dt]).reshape(3, 1)
+
+            self.xk_dr, self.Pk_dr = self.pse.Prediction(self.xk_dr, self.Pk_dr, uk, self.dt)
+
    
             # EKF Prediction step (motion update)
             self.xk , self.Pk = self.pse.Prediction( self.xk , self.Pk , uk ,self.dt)
@@ -490,6 +507,20 @@ class DifferentialDrive:
 
         # Save ICP SLAM and Ground Truth data at every scan
         current_time = rospy.Time.now().to_sec()
+
+        # Latest SLAM pose covariance (bottom-right 3×3)
+        slam_P = self.Pk[-3:, -3:]
+        slam_3sigma_x = 3 * np.sqrt(slam_P[0, 0])
+        slam_3sigma_y = 3 * np.sqrt(slam_P[1, 1])
+
+
+        dr_P = self.Pk_dr[-3:, -3:]
+
+        dr_3sigma_x = 3 * np.sqrt(dr_P[0, 0])
+        dr_3sigma_y = 3 * np.sqrt(dr_P[1, 1])
+
+        self.csv_sigma_log.append([current_time, slam_3sigma_x, slam_3sigma_y, dr_3sigma_x, dr_3sigma_y])
+
 
         # Extract SLAM pose
         slam_x = float(self.xk[-3])
