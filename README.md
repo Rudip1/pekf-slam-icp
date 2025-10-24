@@ -35,6 +35,15 @@ This project presents a pose-based Extended Kalman Filter (EKF) SLAM system usin
   - [Stonefish Simulator](https://github.com/patrykcieslak/stonefish)  
   - [Stonefish ROS Bridge](https://github.com/patrykcieslak/stonefish_ros)
   
+## Paper
+
+See inside media folder or click the link below
+
+Drive link  
+🔗 [Project Paper](https://drive.google.com/file/d/1KqVX6HSElsozbp2WLQJ2daStUSncw_hx/view?usp=drive_link)
+
+---
+
 ## Demo Video
 
 See inside media folder or click the link below
