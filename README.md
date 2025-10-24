@@ -40,7 +40,7 @@ This project presents a pose-based Extended Kalman Filter (EKF) SLAM system usin
 See inside media folder or click the link below
 
 Drive link  
-🔗 [Project Demonstration Video](https://drive.google.com/drive/folders/17vps-_PeFg4AQGtb8tXoSaClggS9_XJu?usp=sharing)
+🔗 [Project Demonstration Video](https://drive.google.com/file/d/1Uha2Z9jwn--AXBEMGu7MCfU_qJS85nfU/view?usp=drive_link)
 
 ---
 
