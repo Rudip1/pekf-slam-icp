@@ -2,7 +2,7 @@
 
 Pose-based Extended Kalman Filter SLAM for a differential-drive TurtleBot (ROS Noetic). Wheel odometry and IMU heading drive the prediction, and ICP registration between 2D LiDAR scans corrects the pose.
 
-[![CI](https://github.com/Rudip1/localization/actions/workflows/ci.yml/badge.svg)](https://github.com/Rudip1/localization/actions/workflows/ci.yml)
+[![CI](https://github.com/Rudip1/pekf-slam-icp/actions/workflows/ci.yml/badge.svg)](https://github.com/Rudip1/pekf-slam-icp/actions/workflows/ci.yml)
 
 ![Loop closing in simulation: estimated trajectory (green), ground truth (red), stored viewpoints and covariance ellipses](media/loop_closing.gif)
 
@@ -81,7 +81,7 @@ These steps match [`.github/workflows/ci.yml`](.github/workflows/ci.yml). They h
 
 ```bash
 mkdir -p ~/ws/src && cd ~/ws/src
-git clone https://github.com/Rudip1/localization.git
+git clone https://github.com/Rudip1/pekf-slam-icp.git localization
 cd ~/ws
 sudo apt-get install -y python3-pip libgl1 libgomp1
 python3 -m pip install colcon-common-extensions

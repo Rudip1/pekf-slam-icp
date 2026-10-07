@@ -14,7 +14,7 @@
 
   <license>Apache-2.0</license>
 
-  <url type="repository">https://github.com/Rudip1/localization</url>
+  <url type="repository">https://github.com/Rudip1/pekf-slam-icp</url>
 
   <buildtool_depend>catkin</buildtool_depend>
 

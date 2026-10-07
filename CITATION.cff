@@ -9,7 +9,7 @@ authors:
     family-names: G.
 version: 0.1.0
 license: Apache-2.0
-repository-code: "https://github.com/Rudip1/localization"
+repository-code: "https://github.com/Rudip1/pekf-slam-icp"
 keywords:
   - SLAM
   - extended Kalman filter
