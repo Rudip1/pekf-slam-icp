@@ -1,4 +1,12 @@
 #!/usr/bin/python3
+"""Pose-based EKF SLAM filter.
+
+The state vector stacks every stored scan viewpoint followed by the current
+robot pose, ``[x_0, y_0, theta_0, ..., x_k, y_k, theta_k]^T``, and the
+covariance holds all cross-correlations between them. Scan-to-scan ICP results
+are used as relative-pose observations between the current pose and earlier
+viewpoints.
+"""
 
 import numpy as np
 from scipy.linalg import block_diag
@@ -11,7 +19,25 @@ from scipy.spatial import KDTree
 import math 
 
 class PoseSLAMEKF:
+    """Extended Kalman Filter over a growing vector of robot poses.
+
+    Provides the differential-drive prediction, state augmentation when a new
+    scan is stored, overlap search, ICNN gating of ICP measurements, the EKF
+    update and a yaw (compass/IMU) update.
+    """
     def __init__(self, x0, P0, Q, compass_Rk , compass_Vk , wheel_base , wheel_radius , overlap_distancce = 2):    
+        """Store the initial estimate and the noise models.
+
+        :param x0: initial state vector (3x1 for a single pose).
+        :param P0: initial state covariance.
+        :param Q: 2x2 process noise covariance used with :meth:`F2k`.
+        :param compass_Rk: 1x1 covariance of the heading measurement.
+        :param compass_Vk: 1x1 heading noise Jacobian.
+        :param wheel_base: distance between the wheels [m].
+        :param wheel_radius: wheel radius [m].
+        :param overlap_distancce: overlap distance threshold [m]. Stored but
+            not read by the methods of this class.
+        """
         
         self.xk = x0
         self.Pk= P0
@@ -37,15 +63,14 @@ class PoseSLAMEKF:
         return (angle + ( 2.0 * np.pi * np.floor( ( np.pi - angle ) / ( 2.0 * np.pi ) ) ) )
     
     def Add_New_Pose(self, xk, Pk):
-        '''
-        This function takes in the state vector and covariance matrix and adds a new pose to the state vector and covariance matrix.
-        Inputs:
-        - xk: The state vector
-        - Pk: The covariance matrix
-        Outputs:
-        - xk: The updated state vector
-        - Pk: The updated covariance matrix
-        '''
+        """Clone the current pose into the state as a new scan viewpoint.
+
+        The clone is fully correlated with the current pose.
+
+        :param xk: state vector.
+        :param Pk: state covariance.
+        :return: augmented ``(xk, Pk)``, three entries longer.
+        """
         xk_new = np.zeros((len(xk)+3,1))
         xk_new[:-3,:] = xk
         xk_new[-3:,:] = xk[-3:,:]
@@ -61,18 +86,14 @@ class PoseSLAMEKF:
         return xk_new , Pk_new
     
     def Prediction(self, xk_1 , Pk_1 , uk , dt):             
-        '''
-        This function takes in the previous state vector, the previous covariance matrix, the control input,
-          and the time step and returns the predicted state vector and covariance matrix.     
-        Inputs:    
-        - xk_1: The previous state vector
-        - Pk_1: The previous covariance matrix
-        - uk: The control input
-        - dt: The time step 
-        Outputs:     
-        - xk: The predicted state vector  
-        - Pk: The predicted covariance matrix
-        '''
+        """EKF prediction of the current pose; stored viewpoints are unchanged.
+
+        :param xk_1: previous state vector.
+        :param Pk_1: previous state covariance.
+        :param uk: 3x1 odometry increment ``[v*dt, 0, w*dt]`` in the robot frame.
+        :param dt: time step [s].
+        :return: predicted ``(xk, Pk)``.
+        """
         t0 = rospy.Time.now().to_sec()
         self.xk = xk_1
         self.dt = dt
@@ -101,10 +122,14 @@ class PoseSLAMEKF:
         return xk ,Pk
     
     def get_robot_pose(self , xk):
+        """Return the current robot pose, i.e. the last three state entries (3x1)."""
         return xk[-3:,-3:]
     
     def F1k(self,xk_robot):
-        
+        """Jacobian of the motion model w.r.t. the robot pose (3x3).
+
+        Uses the control input stored by the last :meth:`Prediction` call.
+        """
         Jfx = Pose3D.J_1oplus(xk_robot,self.uk)
      
         # F1x = np.block([[np.eye(len(self.xk)-3), np.zeros((len(self.xk)-3, 3))],
@@ -112,8 +137,11 @@ class PoseSLAMEKF:
         return Jfx
     
     def F2k(self,xk_robot):
-        
-        
+        """Jacobian of the motion model w.r.t. the 2D process noise (3x2).
+
+        Uses the time step stored by the last :meth:`Prediction` call.
+        TODO: document the units of the noise vector that ``Qk`` describes.
+        """
         theta = xk_robot[-1,-1]
        
         # Jfw = np.array([[self.dt*self.wheel_radius*cos(theta)/2,    self.dt*self.wheel_radius*cos(theta)/2],
@@ -131,13 +159,20 @@ class PoseSLAMEKF:
         
         
     def OverlappingScan(self,xk ,max_num_scans, overlap_distance ):
-        '''
-        This function returns the indices of the scans that are overlapping with the current scan.
-        Inputs:
-        - None
-        Outputs:
-        - H0: The indices of the scans that are overlapping with the current scan
-        '''
+        """Find stored viewpoints close enough to the newest one to be matched.
+
+        Runs a KD-tree nearest-neighbour query (x, y only) from the newest stored
+        viewpoint (the second-to-last pose in the state) to all earlier ones.
+
+        :param xk: state vector.
+        :param max_num_scans: maximum number of neighbours to query.
+        :param overlap_distance: keep neighbours closer than this [m].
+        :returns: list of viewpoint indices (pose index, not state index).
+
+        TODO: the caller in ``slam_icp_node.py`` passes the distance threshold
+        and the scan count in the opposite order to this signature; check which
+        values were intended.
+        """
         H0= [] 
         xk= xk.reshape(-1,3)
         xk_pose = xk[: , 0:2]
@@ -157,10 +192,17 @@ class PoseSLAMEKF:
 
         return H0
     def remove_pose(self, xk , Pk , len = 3):
-        ''' This function removes the last pose from the state vector and covariance matrix.
-        Inputs:
-        - xk: The state vector
-        - Pk: The covariance matrix'''
+        """Drop ``len`` viewpoints from the state to bound its size.
+
+        Removes the poses at indices 1, 3, 5, ... (every second of the oldest
+        poses) from the state vector and the matching rows/columns of the
+        covariance.
+
+        :param xk: state vector.
+        :param Pk: state covariance.
+        :param len: number of poses to remove.
+        :returns: ``(xk, Pk)`` without the removed poses.
+        """
         indices = []
         for l in range(len):
             index = 2*l+1 #get the last even poses index from state vector 
@@ -175,11 +217,11 @@ class PoseSLAMEKF:
        
 
     def h(self, xk ,Hp):
-        """
-        Computes the expected feature observations given the state vector :math:`x_k`.
+        """Stack the expected relative-pose observations for every index in ``Hp``.
 
-        :param xk: state vector
-        :return: expected feature observations
+        :param xk: state vector.
+        :param Hp: list of matched viewpoint indices.
+        :return: stacked expected observations (3*len(Hp) x 1).
         """
         hf = np.zeros((0,1))
         for i in range(len(Hp)):
@@ -187,14 +229,12 @@ class PoseSLAMEKF:
         return hf
 
     def hfj(self, xk, j ):
-        '''
-        This function takes in the state vector and the index of the matched scan and returns the expected observation of the matched scan in the robot frame.
-        Inputs:
-        - xk: The state vector
-        - j: The index of the matched scan
-        Outputs:
-        - hfj: The expected observation of the matched scan in the robot frame
-        '''
+        """Expected pose of the robot relative to viewpoint ``j``: ``(-)x_j (+) x_k``.
+
+        :param xk: state vector.
+        :param j: index of the matched viewpoint.
+        :return: 3x1 relative pose, used as ICP initial guess and as ``h(x)``.
+        """
         # h(xk_bar,vk)=(-) Xk) [+] x_J+ vk
         # Get Pose vector from the filter state
         NxBk = self.get_robot_pose(xk) # current pose 
@@ -209,14 +249,14 @@ class PoseSLAMEKF:
     
     def Jhf(self,xk,j):
         
-        '''
-        This function takes in the state vector and the index of the matched scan and returns the jacobian of the observation model with respect to the state vector.
-        Inputs:
-        - xk: The state vector
-        - j: The index of the matched scan
-        Outputs:
-        - J: The jacobian of the observation model with respect to the state vector
-        '''
+        """Jacobian of :meth:`hfj` with respect to the full state vector.
+
+        Non-zero only in the columns of viewpoint ``j`` and of the current pose.
+
+        :param xk: state vector.
+        :param j: index of the matched viewpoint.
+        :return: 3 x len(xk) Jacobian.
+        """
 
         NxBk = self.get_robot_pose(xk)
         index = int(j*3)
@@ -228,18 +268,14 @@ class PoseSLAMEKF:
 
     def Jhfjx(self, xk, j):
         
-        '''
-        This function takes in the state vector and the index of the matched scan and returns the jacobian of the observation model with respect to the state vector.
-        
-        Inputs:
-        - xk: The state vector
-        - j: The index of the matched scan
-        Outputs:
-        - J1_oplus:
-        - J1_ominus:
-        - J2_oplus:
-                
-        '''
+        """Partial Jacobians of ``(-)x_j (+) x_k``.
+
+        :param xk: state vector.
+        :param j: index of the matched viewpoint.
+        :return: ``(J1_oplus, J1_ominus, J2_oplus)``: compounding Jacobian w.r.t.
+            ``(-)x_j``, inversion Jacobian w.r.t. ``x_j``, and compounding
+            Jacobian w.r.t. ``x_k``.
+        """
         # Get Pose vector from the filter state
         NxBk  = self.get_robot_pose(xk) # current pose 
        
@@ -258,15 +294,16 @@ class PoseSLAMEKF:
 
     
     def jPk(self, xk , Pk, j):
-        '''
-        This function takes in the state vector and the index of the matched scan and returns the covariance matrix of the matched scan in the robot frame.
-        
-        Inputs:
-        - xk: The state vector
-        - j: The index of the matched scan
-        Outputs:
-        - jPk: The jacobian of the measurement model
-        '''
+        """Covariance of the expected relative pose :meth:`hfj`.
+
+        Propagates the marginal covariances of viewpoint ``j`` and the current
+        pose; their cross-covariance is not included.
+
+        :param xk: state vector.
+        :param Pk: state covariance.
+        :param j: index of the matched viewpoint.
+        :return: 3x3 covariance.
+        """
         index = int(j*3)
         NPk = Pk[-3:,-3:]  # Extract the covariance of the robot pose
         NPj = Pk[index:index+3,index:index+3]  # Extract the covariance of the matched scan pose
@@ -276,14 +313,14 @@ class PoseSLAMEKF:
         return jPk
     
     def ObservationMatrix(self,xk,Hp ,zk ,Rk):
-        """
-        Computes the observation matrix for the EKF SLAM algorithm. The observation matrix is computed using the Jacobian of the observation model with respect to the state vector and the feature observation noise.
+        """Build the stacked observation Jacobians for the accepted ICP matches.
 
-        :param xk: state vector
-        :param Hp: vector of feature indices
-        :param zk: vector of feature observations
-        :param Rk: Covariance matrix of the feature observations
-        :return: The observation matrix Hk, the observation noise covariance Vk
+        :param xk: state vector.
+        :param Hp: accepted viewpoint indices.
+        :param zk: stacked ICP measurements.
+        :param Rk: block-diagonal ICP measurement covariance.
+        :return: ``(zk, Rk, Hk, Vk)`` where ``Hk`` is the state Jacobian and
+            ``Vk`` the (identity) measurement-noise Jacobian.
         """
         Hk, Vk = np.zeros((0,np.shape(xk)[0])), np.zeros((0,0))
         xk_robot = self.get_robot_pose(xk)
@@ -300,14 +337,13 @@ class PoseSLAMEKF:
         return zk ,Rk , Hk, Vk 
   
     def SquaredMahalanobisDistance(self, hfj, Pfj, zfi, Rfi):
-        """
-        Computes the squared Mahalanobis distance between the expected feature observation :math:`hf_j` and the feature observation :math:`z_{f_i}`.
+        """Squared Mahalanobis distance of the innovation ``zfi - hfj``.
 
-        :param hfj: expected feature observation
-        :param Pfj: expected feature observation covariance
-        :param zfi: feature observation
-        :param Rfi: feature observation covariance
-        :return: Squared Mahalanobis distance between the expected feature observation :math:`hf_j` and the feature observation :math:`z_{f_i}`
+        :param hfj: expected relative pose.
+        :param Pfj: covariance of the expected relative pose.
+        :param zfi: measured relative pose (ICP).
+        :param Rfi: measurement covariance.
+        :return: 1x1 array with the squared distance.
         """
         # Compute inovation
         v_ij = zfi - hfj
@@ -319,13 +355,12 @@ class PoseSLAMEKF:
         return D2_ij
 
     def IndividualCompatibility(self, D2_ij, dof, alpha):
-        """
-        Computes the individual compatibility test for the squared Mahalanobis distance :math:`D^2_{ij}`. The test is performed using the Chi-Square distribution with :math:`dof` degrees of freedom and a significance level :math:`\\alpha`.
+        """Chi-squared gate on a squared Mahalanobis distance.
 
-        :param D2_ij: squared Mahalanobis distance
-        :param dof: number of degrees of freedom
-        :param alpha: confidence level
-        :return: bolean value indicating if the Mahalanobis distance is smaller than the threshold defined by the confidence level
+        :param D2_ij: squared Mahalanobis distance.
+        :param dof: degrees of freedom.
+        :param alpha: confidence level of the gate.
+        :return: True if ``D2_ij`` is below the ``alpha`` quantile of chi2(dof).
         """
         # print("D2_ij", D2_ij)
         isCompatible = D2_ij < scipy.stats.chi2.ppf(alpha, dof)
@@ -333,18 +368,14 @@ class PoseSLAMEKF:
         return isCompatible
 
     def ICNN(self, hf, Phf, zf, Rf):
-        """
-        Individual Compatibility Nearest Neighbor (ICNN) data association algorithm. Given a set of expected feature
-        observations :math:`h_f` and a set of feature observations :math:`z_f`, the algorithm returns a pairing hypothesis
-        :math:`H` that associates each feature observation :math:`z_{f_i}` with the expected feature observation
-        :math:`h_{f_j}` that minimizes the Mahalanobis distance :math:`D^2_{ij}`.
+        """Individual-compatibility test for one ICP measurement.
 
-        :param hf: vector of expected feature observations
-        :param Phf: Covariance matrix of the expected feature observations
-        :param zf: vector of feature observations
-        :param Rf: Covariance matrix of the feature observations
-        :param dim: feature dimensionality
-        :return: The vector of asociation hypothesis H
+        :param hf: expected relative pose (3x1).
+        :param Phf: its covariance (3x3).
+        :param zf: ICP relative pose (3x1).
+        :param Rf: ICP covariance (3x3).
+        :return: True if the measurement passes the gate at ``self.alpha``,
+            otherwise None.
         """
 
         D2_ij = self.SquaredMahalanobisDistance(hf, Phf, zf, Rf)
@@ -352,16 +383,18 @@ class PoseSLAMEKF:
             return True
     
     def Update(self, xk, Pk, Hk, Vk, zk, Rk  , Hp):
-        """
-        Updates the state vector and covariance matrix using the EKF update step.
+        """EKF correction with the stacked ICP measurements.
 
-        :param xk: state vector
-        :param Pk: Covariance matrix of the state vector
-        :param Hk: observation matrix
-        :param Vk: observation noise covariance
-        :param zk: observation vector
-        :param Rk: observation covariance
-        :return: Updated state vector and covariance matrix
+        The covariance is updated as ``(I - K H) P (I - K H)^T``.
+
+        :param xk: state vector.
+        :param Pk: state covariance.
+        :param Hk: observation Jacobian w.r.t. the state.
+        :param Vk: observation Jacobian w.r.t. the measurement noise.
+        :param zk: stacked ICP measurements.
+        :param Rk: measurement covariance.
+        :param Hp: matched viewpoint indices (to evaluate ``h(xk)``).
+        :return: updated ``(xk, Pk)``.
         """
 
         Kk = Pk @ Hk.T @ np.linalg.inv(Hk @ Pk @ Hk.T + Vk@Rk@Vk.T)
@@ -373,7 +406,13 @@ class PoseSLAMEKF:
         return xk, Pk
     
     def heading_update(self , xk , Pk , yaw):
-        '''This function updates the heading of the robot using the IMU data'''
+        """EKF correction of the current heading with an absolute yaw reading.
+
+        :param xk: state vector.
+        :param Pk: state covariance.
+        :param yaw: 1x1 measured yaw [rad] (IMU orientation).
+        :return: updated ``(xk, Pk)``.
+        """
         # Create a row vector of zeros of size 1 x 3*num_poses
         # print("imu update")   
         Hk = np.zeros((1, len(xk)))

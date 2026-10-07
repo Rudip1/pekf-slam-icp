@@ -23,6 +23,6 @@
     <node pkg="rqt_robot_steering" type="rqt_robot_steering" name="rqt_robot_steering" output="screen"/>
 
     <!-- Launch RViz with your configuration -->
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find localization)/config/hol.rviz"/>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find localization)/config/slam.rviz"/>
 </launch>
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Plot the 3-sigma position uncertainty of EKF SLAM and dead reckoning from data/three_sigma_log.csv."""
 
 import os
 import pandas as pd

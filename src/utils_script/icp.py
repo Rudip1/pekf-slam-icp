@@ -1,3 +1,4 @@
+"""2D scan-to-scan registration with Open3D point-to-point ICP."""
 
 import numpy as np
 import open3d as o3d
@@ -8,6 +9,14 @@ from  utils_script.helper import *
 #from helper_function import compose_transform_matrix, decompose_transform_matrix 
 
 def draw_registration_result(source, target, transformation):
+    """Show two Open3D point clouds after applying ``transformation`` to ``source``.
+
+    Debug helper; not called by the SLAM node.
+
+    :param source: Open3D point cloud to transform (drawn in yellow).
+    :param target: Open3D reference point cloud (drawn in blue).
+    :param transformation: 4x4 homogeneous transform applied to ``source``.
+    """
     source_temp = copy.deepcopy(source)
     target_temp = copy.deepcopy(target)
     source_temp.paint_uniform_color([1, 0.706, 0])
@@ -23,18 +32,18 @@ def draw_registration_result(source, target, transformation):
 
 def ICP(MatchedScan , CurrentScan , initial_guess): #, MatchedVp, CurrentVp
 
-    '''
-    This function takes in two point clouds and returns the transformation matrix 
-    that aligns the two point clouds.
-    
-    Inputs:
-    - MatchedScan: The first point cloud to be aligned
-    - CurrentScan: The second point cloud to be aligned
-    - initial_guess: The initial guess for the transformation matrix
-        
-    Outputs:
-    - zr: The transformation matrix that aligns the two point clouds
-    '''
+    """Register ``CurrentScan`` onto ``MatchedScan`` and return the relative pose.
+
+    Both scans are Nx2 arrays in their own robot frames. Registration uses
+    Open3D point-to-point ICP with a 0.1 m correspondence distance and up to
+    2000 iterations.
+
+    :param MatchedScan: Nx2 reference scan (earlier viewpoint, target).
+    :param CurrentScan: Mx2 scan of the current viewpoint (source).
+    :param initial_guess: 3x1 initial relative pose ``[x, y, theta]``.
+    :returns: 3x1 ndarray ``[x, y, theta]``, pose of the current viewpoint in
+        the matched viewpoint's frame.
+    """
 
     x1 = np.copy(CurrentScan[:,0])
     y1 = np.copy(CurrentScan[:,1])
@@ -94,7 +103,6 @@ def ICP(MatchedScan , CurrentScan , initial_guess): #, MatchedVp, CurrentVp
     # ax2.scatter(x3, y3, c='red', s=1) # aligned scan
     # ax2.legend(["source scan", "target scan", "aligned scan"])
     # ax2.set_title("scan matching using ICP")
-    # # plt.savefig('/home/elias/catkin_ws/src/localization_lab/src/media'+str(np.round(time.time(), 2))+'.png')
     # plt.close()
 
 

@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Pose-Based EKF SLAM with ICP Laser Scan Matching"
+type: software
+authors:
+  - given-names: Pravin
+    family-names: Oli
+  - given-names: Gebrecherkos
+    family-names: G.
+version: 0.1.0
+license: Apache-2.0
+repository-code: "https://github.com/Rudip1/pekf-slam-icp"
+keywords:
+  - SLAM
+  - extended Kalman filter
+  - ICP
+  - ROS
+  - mobile robotics
