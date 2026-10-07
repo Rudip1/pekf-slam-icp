@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""ROS node running pose-based EKF SLAM with ICP scan matching on a Kobuki TurtleBot.
+
+Subscribes to wheel joint states, IMU, RPLidar scans, ``/cmd_vel`` and the
+simulator ground truth; publishes odometry, TF, the point-cloud map and RViz
+markers. On shutdown the estimated and ground-truth trajectories are written as
+CSV files to ``data/``.
+"""
 
 # -----------------------------
 # IMPORTS
@@ -59,6 +66,10 @@ class DifferentialDrive:
     PoseSLAMEKF, ICP, tf2, RViz.
     """
     def __init__(self) -> None:
+        """Set up filter parameters, the EKF, TF, publishers and subscribers.
+
+        Must be called after ``rospy.init_node``.
+        """
         # -----------------------------
         # Robot state & parameters
         # -----------------------------
@@ -131,10 +142,6 @@ class DifferentialDrive:
 
 
         # EKF SLAM instance (create object of pose based slam )
-        """Creates the SLAM filter with robots parameters.
-        PoseSLAMEKF is the EKF to use in prediction & update.
-        Stores motion model and noise models.
-        """
         self.pse = PoseSLAMEKF(
             self.xk, self.Pk, self.Qk, self.compass_Rk, self.compass_Vk,
             self.wheel_base, self.wheel_radius, self.overlapping_check_th_dis
@@ -158,7 +165,7 @@ class DifferentialDrive:
         self.scan_cartesian = []
         self.gt_theta = 0.0
         
-        # Automatically get path to 'hol/data' folder (one level above src/)
+        # Path to the 'data' folder (one level above src/)
         self.data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir)
@@ -201,7 +208,10 @@ class DifferentialDrive:
         #1_save_logs_to_csv
     # ------------------------- 
     def save_logs_to_csv(self):
-        # Save SLAM and Ground Truth logs to CSV files
+        """Write the SLAM, ground-truth and 3-sigma logs to CSV files in ``data/``.
+
+        Registered with ``rospy.on_shutdown``.
+        """
         slam_path = os.path.join(self.data_dir, 'slam_icp_log.csv')
         gt_path = os.path.join(self.data_dir, 'ground_truth_log.csv')
         sigma_path = os.path.join(self.data_dir, 'three_sigma_log.csv')
@@ -373,6 +383,11 @@ class DifferentialDrive:
         self.mutex.release()
 
     def velocity_callback(self, msg):
+        """Convert a ``/cmd_vel`` Twist to left/right wheel velocities and publish them.
+
+        Args:
+            msg (Twist): commanded linear.x [m/s] and angular.z [rad/s].
+        """
         lin_vel = msg.linear.x
         ang_vel = msg.angular.z
 
@@ -542,13 +557,11 @@ class DifferentialDrive:
         #1_publish_odometry
     # -------------------------
     def publish_odometry(self ,msg):
-        """
-        Publishes the odometry message
-        """
-        '''This function publishes the odometry message
+        """Publish the current pose estimate as Odometry and as a TF transform.
+
         Args:
-            msg (JointState): The joint state message
-        '''
+            msg (JointState): joint state message whose stamp is used.
+        """
        
         odom = Odometry()
         

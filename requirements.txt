@@ -1,0 +1,2 @@
+# Python packages not provided by ROS Noetic apt packages.
+open3d
