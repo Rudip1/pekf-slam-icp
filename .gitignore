@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# catkin / colcon workspaces
+build/
+devel/
+install/
+log/
+logs/
+.catkin_tools/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# MATLAB autosave
+*.asv
+
+# Archives and large recordings
+*.zip
+*.tar.gz
+*.bag
+*.mp4
+*.avi
+*.mov

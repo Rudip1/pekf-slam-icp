@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ros:noetic-ros-base
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/localization
+
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3-pip libgl1 libgomp1
+          python3 -m pip install --upgrade pip
+          python3 -m pip install colcon-common-extensions
+
+      - name: Install ROS dependencies
+        run: |
+          rosdep update --rosdistro noetic
+          # GUI / mapping tools are only needed by the launch files.
+          rosdep install --from-paths src --ignore-src -y --rosdistro noetic \
+            --skip-keys "rviz rqt_robot_steering octomap_server"
+
+      - name: colcon build
+        run: |
+          source /opt/ros/noetic/setup.bash
+          colcon build --event-handlers console_direct+
+
+      - name: Install Python requirements
+        run: |
+          # PyYAML from apt cannot be uninstalled by pip.
+          python3 -m pip install --ignore-installed PyYAML
+          python3 -m pip install -r src/localization/requirements.txt
+
+      - name: Import test
+        run: |
+          source install/setup.bash
+          cd install/localization/lib/localization
+          python3 -c "import utils_script.pose, utils_script.helper, utils_script.ekf_pose_slam, utils_script.icp"
+          python3 -c "import slam_icp_node, test_node"
+          python3 -m py_compile laser_scan_to_point_cloud_node.py
+
+      - name: Evaluate logged run
+        run: python3 src/localization/tools/evaluate_logs.py
