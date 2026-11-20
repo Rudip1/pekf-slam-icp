@@ -1,0 +1,71 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Cell Size: 1
+      Plane Cell Count: 20
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Map (stored scans)
+      Topic:
+        Value: /pekf/map_cloud
+        Durability Policy: Transient Local
+      Size (m): 0.03
+      Style: Flat Squares
+      Color Transformer: FlatColor
+      Color: 30; 30; 30
+      Value: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: Current scan
+      Topic:
+        Value: /scan
+        Reliability Policy: Best Effort
+      Size (m): 0.04
+      Color Transformer: FlatColor
+      Color: 239; 41; 41
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Name: SLAM path
+      Topic:
+        Value: /pekf/path
+      Color: 25; 100; 220
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Dead-reckoning path
+      Topic:
+        Value: /pekf/dead_reckoning_path
+      Color: 220; 60; 60
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Viewpoints
+      Topic:
+        Value: /pekf/viewpoints
+      Value: true
+    - Class: rviz_default_plugins/PoseWithCovariance
+      Name: SLAM pose
+      Topic:
+        Value: /pekf/pose
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Value: false
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Current View
+      Scale: 40
+      X: 0
+      Y: 0
+  Value: true
+Window Geometry:
+  Height: 900
+  Width: 1400

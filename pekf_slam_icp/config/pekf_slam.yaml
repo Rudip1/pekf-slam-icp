@@ -1,0 +1,29 @@
+# Parameters of pekf_slam_node. Robot geometry must match pekf_slam_icp_gazebo/urdf/robot.urdf.xacro.
+pekf_slam:
+  ros__parameters:
+    use_sim_time: true
+    wheel_radius: 0.1
+    wheel_separation: 0.5
+    left_wheel_joint: left_wheel_joint
+    right_wheel_joint: right_wheel_joint
+    encoder_variance_per_meter: 2.0e-4   # wheel travel variance per metre travelled [m^2/m]
+    use_imu: true
+    imu_yaw_stddev: 0.0087               # 0.5 deg
+    imu_update_period: 0.1               # s between heading updates
+    initial_x: -5.5                      # spawn pose of the robot: the map frame is the world frame
+    initial_y: -4.0
+    initial_yaw: 0.0
+    initial_position_stddev: 0.01
+    initial_yaw_stddev: 0.0035
+    viewpoint_distance: 0.5              # store a scan every 0.5 m ...
+    viewpoint_angle: 0.4                 # ... or 0.4 rad of turning
+    overlap_distance: 1.5                # match against stored scans within 1.5 m + 3 sigma
+    max_matches: 3
+    gate_probability: 0.999
+    icp_max_rmse: 0.03
+    icp_min_pairs: 60
+    icp_max_correspondence_distance: 0.5
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+    publish_tf: true
