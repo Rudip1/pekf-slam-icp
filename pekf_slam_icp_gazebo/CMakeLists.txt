@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+project(pekf_slam_icp_gazebo NONE)
+find_package(ament_cmake REQUIRED)
+install(DIRECTORY urdf worlds config launch DESTINATION share/${PROJECT_NAME})
+ament_package()
