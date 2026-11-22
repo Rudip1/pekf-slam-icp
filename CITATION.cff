@@ -5,8 +5,6 @@ type: software
 authors:
   - given-names: Pravin
     family-names: Oli
-  - given-names: Gebrecherkos
-    family-names: Gebreslassie
 version: 1.0.0
 license: Apache-2.0
 repository-code: "https://github.com/Rudip1/pekf-slam-icp"

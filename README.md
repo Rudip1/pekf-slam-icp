@@ -140,7 +140,7 @@ robot makes no progress.
 
 ## Acknowledgements
 
-Developed by Pravin Oli and Gebrecherkos Gebreslassie. The ROS 2 / C++ version reuses
+Developed by Pravin Oli. The ROS 2 / C++ version reuses
 [learn-state-estimation](https://github.com/Rudip1/learn-state-estimation).
 
 ## License
